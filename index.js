@@ -6,74 +6,68 @@ app.use(express.json());
 
 const DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1493932821528707202/H9vpB_SrcYQe2HR0noBcp24DlpuZPn4P9cTNZK7X0ftVAe2t8KNintIiSQjYx65OzGH-";
 
-// Danh sách quản lý các máy đang treo
 let sessions = {};
 
 app.post('/ping', async (req, res) => {
     const { username, userId, gameName, startTime } = req.body;
-    if (!username) return res.status(400).send("Missing data");
+    if (!username) return res.status(400).send("No data");
 
     const now = Date.now();
 
-    // Nếu là tài khoản mới hoặc đã từng bị xóa do dis
+    // Nếu là acc mới, gửi tin nhắn thông báo lên Discord
     if (!sessions[username]) {
-        sessions[username] = {
-            lastSeen: now,
-            userId: userId,
-            gameName: gameName,
-            startTime: startTime
-        };
+        console.log(`[START] ${username} đang kết nối...`);
+        sessions[username] = { lastSeen: now, userId, gameName, startTime };
 
-        // Gửi thông báo BẮT ĐẦU (Chỉ gửi 1 lần duy nhất)
         const embed = {
             embeds: [{
-                title: "➕ TÀI KHOẢN BẮT ĐẦU TREO",
-                color: 5763719, // Màu xanh tươi
-                thumbnail: { url: `https://www.roblox.com/headshot-thumbnail/image?userId=${userId}&width=420&height=420&format=png` },
+                title: "✅ TÀI KHOẢN ĐANG TREO",
+                color: 65280,
+                thumbnail: { url: `https://www.roblox.com/headshot-thumbnail/image?userId=${userId}&width=150&height=150&format=png` },
                 fields: [
-                    { name: "👤 Tài khoản", value: `**${username}**`, inline: true },
+                    { name: "👤 User", value: `**${username}**`, inline: true },
                     { name: "🎮 Game", value: gameName, inline: true },
-                    { name: "⏰ Bắt đầu lúc", value: startTime, inline: false }
-                ],
-                footer: { text: "Hệ thống giám sát treo acc" }
+                    { name: "⏳ Start", value: startTime, inline: false }
+                ]
             }]
         };
 
-        axios.post(DISCORD_WEBHOOK, embed).catch(e => console.log("Lỗi gửi Webhook Start"));
+        // Gửi thử, nếu lỗi thì log ra console của Render
+        axios.post(DISCORD_WEBHOOK, embed).catch(err => console.error("Discord Error:", err.response?.data || err.message));
     } else {
-        // Nếu đã tồn tại thì chỉ cập nhật thời gian tín hiệu cuối
+        // Chỉ cập nhật thời gian, không gửi webhook để tránh bị khóa
         sessions[username].lastSeen = now;
     }
 
-    res.status(200).send("PONG");
+    res.status(200).send("Updated");
 });
 
-// Kiểm tra dis mỗi 5 giây
+// Check disconnect mỗi 10 giây
 setInterval(() => {
     const now = Date.now();
     for (const user in sessions) {
-        if (now - sessions[user].lastSeen > 30000) { // Quá 30 giây không ping
-            const disTime = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+        // Nếu quá 35 giây không thấy tín hiệu (cho dư ra 5s để tránh lag)
+        if (now - sessions[user].lastSeen > 35000) {
+            console.log(`[DISCONNECT] ${user} đã sập!`);
             
             const embed = {
                 embeds: [{
-                    title: "⚠️ CẢNH BÁO: MẤT KẾT NỐI",
-                    description: `Tài khoản **${user}** đã ngừng gửi tín hiệu!`,
-                    color: 15548997, // Màu đỏ
-                    thumbnail: { url: `https://www.roblox.com/headshot-thumbnail/image?userId=${sessions[user].userId}&width=420&height=420&format=png` },
+                    title: "❌ CẢNH BÁO: MẤT KẾT NỐI",
+                    description: `Acc **${user}** đã dừng nhận thông báo!`,
+                    color: 16711680,
+                    thumbnail: { url: `https://www.roblox.com/headshot-thumbnail/image?userId=${sessions[user].userId}&width=150&height=150&format=png` },
                     fields: [
-                        { name: "❌ Trạng thái", value: "Đã Disconnect / Sập máy ảo", inline: true },
-                        { name: "🕒 Thời gian bị ngắt", value: disTime, inline: true }
+                        { name: "🕒 Thời gian dis", value: new Date().toLocaleString('vi-VN'), inline: true }
                     ]
                 }]
             };
 
-            axios.post(DISCORD_WEBHOOK, embed).catch(e => console.log("Lỗi gửi Webhook Dis"));
-            
-            // Xóa khỏi danh sách sau khi báo dis
+            axios.post(DISCORD_WEBHOOK, embed).catch(err => console.error("Discord Error:", err.response?.data || err.message));
             delete sessions[user];
         }
     }
-}, 5000);
+}, 10000);
 
-app.listen(process.env.PORT || 3000, () => console.log("Server Running..."));
+app.get('/', (req, res) => res.send("Hệ thống check acc đang chạy!"));
+
+app.listen(process.env.PORT || 3000);
